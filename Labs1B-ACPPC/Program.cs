@@ -1,22 +1,22 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Globalization;
 
 class Program
 {
-    const double EPS = 1e-9;
+    const double EPS = 1e-10;
 
-    static int n, m;
-    static double[] c;
-    static double[,] a;
-    static double[] b;
+    static int variablesCount;
+    static int constraintsCount;
+
+    static double[] objective;
+    static double[,] constraints;
+    static double[] rightSide;
     static string[] signs;
     static bool isMax;
 
     static double[,] table;
-    static int[] basis;
-    static double[] currentC;
-    static bool[] artificial;
+    static string[] rowLabels;
+    static string[] colLabels;
 
     static void Main()
     {
@@ -26,31 +26,42 @@ class Program
         while (true)
         {
             Console.WriteLine("\nПРАКТИЧНА РОБОТА №1В");
-            Console.WriteLine("1 - Ввести задачу");
-            Console.WriteLine("2 - Завантажити приклад");
-            Console.WriteLine("3 - Показати задачу");
-            Console.WriteLine("4 - Розв'язати задачу");
+            Console.WriteLine("Модифіковані жорданові виключення");
+            Console.WriteLine("1 - Ввести задачу вручну");
+            Console.WriteLine("2 - Завантажити приклад з методички");
+            Console.WriteLine("3 - Завантажити мій варіант 12");
+            Console.WriteLine("4 - Показати задачу");
+            Console.WriteLine("5 - Розв'язати задачу");
             Console.WriteLine("0 - Вихід");
             Console.Write("Ваш вибір: ");
 
             int choice = int.Parse(Console.ReadLine());
 
-            if (choice == 0) break;
+            if (choice == 0)
+                break;
 
             switch (choice)
             {
                 case 1:
                     InputProblem();
                     break;
+
                 case 2:
                     LoadExample();
                     break;
+
                 case 3:
-                    if (Exists()) PrintProblem();
+                    LoadVariant12();
                     break;
+
                 case 4:
-                    if (Exists()) Solve();
+                    if (CheckProblem()) PrintProblem();
                     break;
+
+                case 5:
+                    if (CheckProblem()) Solve();
+                    break;
+
                 default:
                     Console.WriteLine("Невірний вибір.");
                     break;
@@ -58,45 +69,46 @@ class Program
         }
     }
 
+
     static void InputProblem()
     {
         Console.Write("Кількість змінних: ");
-        n = int.Parse(Console.ReadLine());
+        variablesCount = int.Parse(Console.ReadLine());
 
         Console.Write("Кількість обмежень: ");
-        m = int.Parse(Console.ReadLine());
+        constraintsCount = int.Parse(Console.ReadLine());
 
         Console.Write("Тип задачі max/min: ");
         isMax = Console.ReadLine().Trim().ToLower() == "max";
 
-        c = new double[n];
-        a = new double[m, n];
-        b = new double[m];
-        signs = new string[m];
+        objective = new double[variablesCount];
+        constraints = new double[constraintsCount, variablesCount];
+        rightSide = new double[constraintsCount];
+        signs = new string[constraintsCount];
 
         Console.WriteLine("\nКоефіцієнти функції Z:");
-        for (int j = 0; j < n; j++)
+        for (int j = 0; j < variablesCount; j++)
         {
             Console.Write($"c[{j + 1}] = ");
-            c[j] = double.Parse(Console.ReadLine());
+            objective[j] = double.Parse(Console.ReadLine());
         }
 
         Console.WriteLine("\nОбмеження:");
-        for (int i = 0; i < m; i++)
+        for (int i = 0; i < constraintsCount; i++)
         {
-            Console.WriteLine($"Обмеження {i + 1}");
+            Console.WriteLine($"Обмеження {i + 1}:");
 
-            for (int j = 0; j < n; j++)
+            for (int j = 0; j < variablesCount; j++)
             {
                 Console.Write($"a[{i + 1},{j + 1}] = ");
-                a[i, j] = double.Parse(Console.ReadLine());
+                constraints[i, j] = double.Parse(Console.ReadLine());
             }
 
             Console.Write("Знак <=, >= або = : ");
             signs[i] = Console.ReadLine().Trim();
 
             Console.Write($"b[{i + 1}] = ");
-            b[i] = double.Parse(Console.ReadLine());
+            rightSide[i] = double.Parse(Console.ReadLine());
         }
 
         Console.WriteLine("Задачу збережено.");
@@ -104,203 +116,191 @@ class Program
 
     static void LoadExample()
     {
-        n = 4;
-        m = 3;
+        variablesCount = 4;
+        constraintsCount = 3;
         isMax = true;
 
+        objective = new double[] { 1, 2, -1, -1 };
 
-        c = new double[] { -2, -1, 1, 1 };
-
-        a = new double[,]
+        constraints = new double[,]
         {
-        { 2, -1, 3, 4 },
-        { 1,  1, 1,-1 },
-        { 1,  2, 2, 4 }
+            { 1,  1, -1, -2 },
+            { 1,  1,  1, -1 },
+            { 2, -1,  3,  4 }
+        };
+
+        signs = new string[] { "<=", ">=", "<=" };
+        rightSide = new double[] { 6, 5, 10 };
+
+        Console.WriteLine("Завантажено приклад з методички.");
+    }
+
+    static void LoadVariant12()
+    {
+        variablesCount = 4;
+        constraintsCount = 3;
+        isMax = true;
+
+        objective = new double[] { -2, -1, 1, 1 };
+
+        constraints = new double[,]
+        {
+            { 2, -1, 3, 4 },
+            { 1,  1, 1, -1 },
+            { 1,  2, 2, 4 }
         };
 
         signs = new string[] { "<=", "<=", "<=" };
-
-        b = new double[] { 10, 5, 12 };
+        rightSide = new double[] { 10, 5, 12 };
 
         Console.WriteLine("Завантажено варіант 12.");
     }
 
-    static bool Exists()
+    static bool CheckProblem()
     {
-        if (c == null)
+        if (objective == null)
         {
-            Console.WriteLine("Спочатку введіть задачу.");
+            Console.WriteLine("Спочатку потрібно ввести або завантажити задачу.");
             return false;
         }
 
         return true;
     }
 
-    static void PrintProblem()
-    {
-        Console.WriteLine("\nПостановка задачі:");
-        Console.Write("Z = ");
-
-        for (int j = 0; j < n; j++)
-        {
-            if (j > 0 && c[j] >= 0) Console.Write("+ ");
-            Console.Write($"{c[j]}x{j + 1} ");
-        }
-
-        Console.WriteLine(isMax ? "-> max" : "-> min");
-
-        Console.WriteLine("при обмеженнях:");
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (j > 0 && a[i, j] >= 0) Console.Write("+ ");
-                Console.Write($"{a[i, j]}x{j + 1} ");
-            }
-
-            Console.WriteLine($"{signs[i]} {b[i]}");
-        }
-
-        Console.WriteLine("xj >= 0");
-    }
 
     static void Solve()
     {
+        Console.WriteLine("\nЗгенерований протокол обчислення:\n");
+
         PrintProblem();
 
-        Console.WriteLine("\nПерехід до задачі максимуму:");
-        double[] target = new double[n];
+        if (!isMax)
+        {
+            Console.WriteLine("\nПерехід до задачі максимізації функції мети Z':");
 
-        for (int j = 0; j < n; j++)
-            target[j] = isMax ? c[j] : -c[j];
+            Console.Write("Z' = ");
+            for (int j = 0; j < variablesCount; j++)
+            {
+                double value = -objective[j];
+                PrintTerm(value, $"X[{j + 1}]", j == 0);
+            }
+            Console.WriteLine(" -> max");
+        }
 
-        BuildTable(target);
+        Console.WriteLine("\nПерепишемо систему обмежень:");
+        BuildSimplexTable();
 
-        Console.WriteLine("\nПочаткова симплекс-таблиця:");
+        PrintRewrittenSystem();
+
+        Console.WriteLine("\nВхідна симплекс-таблиця:");
         PrintTable();
 
-        Console.WriteLine("\nЕТАП 1. Пошук опорного розв'язку");
-        double[] phase1C = new double[table.GetLength(1) - 1];
+        Console.WriteLine("Пошук опорного розв'язку:");
+        FindSupportSolution();
 
-        for (int j = 0; j < artificial.Length; j++)
-            phase1C[j] = artificial[j] ? -1 : 0;
+        Console.WriteLine("\nЗнайдено опорний розв'язок:");
+        PrintCurrentX();
 
-        currentC = phase1C;
-        RecalculateZRow();
+        Console.WriteLine("\nПошук оптимального розв'язку:");
+        FindOptimalSolution();
 
-        SimplexProcess(true);
+        Console.WriteLine("\nЗнайдено оптимальний розв'язок:");
+        PrintCurrentX();
 
-        double phaseValue = table[m, table.GetLength(1) - 1];
+        double zValue = table[table.GetLength(0) - 1, table.GetLength(1) - 1];
 
-        if (Math.Abs(phaseValue) > EPS)
-        {
-            Console.WriteLine("Допустимого опорного розв'язку не існує.");
-            return;
-        }
-
-        Console.WriteLine("\nОпорний розв'язок знайдено.");
-
-        Console.WriteLine("\nЕТАП 2. Пошук оптимального розв'язку");
-        double[] phase2C = new double[table.GetLength(1) - 1];
-
-        for (int j = 0; j < n; j++)
-            phase2C[j] = target[j];
-
-        currentC = phase2C;
-        RecalculateZRow();
-
-        SimplexProcess(false);
-
-        PrintAnswer(target);
+        if (isMax)
+            Console.WriteLine($"\nMax (Z) = {zValue:F2}");
+        else
+            Console.WriteLine($"\nMin (Z) = {-zValue:F2}");
     }
 
-    static void BuildTable(double[] target)
+    static void BuildSimplexTable()
     {
-        int slackCount = 0;
-        int artificialCount = 0;
+        int rows = constraintsCount + 1;
+        int cols = variablesCount + 1;
 
-        for (int i = 0; i < m; i++)
+        table = new double[rows, cols];
+        rowLabels = new string[rows];
+        colLabels = new string[cols];
+
+        for (int j = 0; j < variablesCount; j++)
+            colLabels[j] = $"-x{j + 1}";
+
+        colLabels[cols - 1] = "1";
+
+        for (int i = 0; i < constraintsCount; i++)
         {
-            NormalizeConstraint(i);
-
-            if (signs[i] == "<=") slackCount++;
-            else if (signs[i] == ">=")
-            {
-                slackCount++;
-                artificialCount++;
-            }
-            else if (signs[i] == "=") artificialCount++;
-        }
-
-        int totalVars = n + slackCount + artificialCount;
-        table = new double[m + 1, totalVars + 1];
-        basis = new int[m];
-        artificial = new bool[totalVars];
-
-        int slackIndex = n;
-        int artificialIndex = n + slackCount;
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-                table[i, j] = a[i, j];
+            rowLabels[i] = $"y{i + 1}";
 
             if (signs[i] == "<=")
             {
-                table[i, slackIndex] = 1;
-                basis[i] = slackIndex;
-                slackIndex++;
+                for (int j = 0; j < variablesCount; j++)
+                    table[i, j] = constraints[i, j];
+
+                table[i, cols - 1] = rightSide[i];
             }
             else if (signs[i] == ">=")
             {
-                table[i, slackIndex] = -1;
-                slackIndex++;
+                for (int j = 0; j < variablesCount; j++)
+                    table[i, j] = -constraints[i, j];
 
-                table[i, artificialIndex] = 1;
-                artificial[artificialIndex] = true;
-                basis[i] = artificialIndex;
-                artificialIndex++;
+                table[i, cols - 1] = -rightSide[i];
             }
             else
             {
-                table[i, artificialIndex] = 1;
-                artificial[artificialIndex] = true;
-                basis[i] = artificialIndex;
-                artificialIndex++;
+                Console.WriteLine("Увага: знак '=' у цій версії бажано замінити двома нерівностями.");
             }
-
-            table[i, totalVars] = b[i];
         }
+
+        rowLabels[rows - 1] = "Z";
+
+        for (int j = 0; j < variablesCount; j++)
+        {
+            if (isMax)
+                table[rows - 1, j] = -objective[j];
+            else
+                table[rows - 1, j] = objective[j];
+        }
+
+        table[rows - 1, cols - 1] = 0;
     }
 
-    static void NormalizeConstraint(int i)
+    static void FindSupportSolution()
     {
-        if (b[i] >= 0) return;
-
-        for (int j = 0; j < n; j++)
-            a[i, j] *= -1;
-
-        b[i] *= -1;
-
-        if (signs[i] == "<=") signs[i] = ">=";
-        else if (signs[i] == ">=") signs[i] = "<=";
-    }
-
-    static void SimplexProcess(bool phase1)
-    {
-        int step = 1;
-
         while (true)
         {
-            int pivotCol = FindPivotColumn(phase1);
+            int pivotRow = FindNegativeFreeTermRow();
+
+            if (pivotRow == -1)
+                break;
+
+            int pivotCol = FindNegativeElementInRow(pivotRow);
 
             if (pivotCol == -1)
             {
-                Console.WriteLine("Критерій оптимальності виконано.");
-                break;
+                Console.WriteLine("Опорний розв'язок не існує.");
+                return;
             }
 
-            int pivotRow = FindPivotRow(pivotCol);
+            Console.WriteLine($"\nРозв'язувальний рядок: {rowLabels[pivotRow]}");
+            Console.WriteLine($"Розв'язувальний стовпець: {colLabels[pivotCol]}");
+
+            ModifiedJordanStep(pivotRow, pivotCol);
+            PrintTable();
+        }
+    }
+
+    static void FindOptimalSolution()
+    {
+        while (true)
+        {
+            int pivotCol = FindNegativeElementInZRow();
+
+            if (pivotCol == -1)
+                break;
+
+            int pivotRow = FindResolvingRowForOptimal(pivotCol);
 
             if (pivotRow == -1)
             {
@@ -308,177 +308,256 @@ class Program
                 return;
             }
 
-            Console.WriteLine($"\nКрок {step}");
-            Console.WriteLine($"Розв'язувальний стовпець: {VarName(pivotCol)}");
-            Console.WriteLine($"Розв'язувальний рядок: y{pivotRow + 1}");
-            Console.WriteLine($"Розв'язувальний елемент: {table[pivotRow, pivotCol]:F4}");
+            Console.WriteLine($"\nРозв'язувальний рядок: {rowLabels[pivotRow]}");
+            Console.WriteLine($"Розв'язувальний стовпець: {colLabels[pivotCol]}");
 
-            basis[pivotRow] = pivotCol;
             ModifiedJordanStep(pivotRow, pivotCol);
-            RecalculateZRow();
-
             PrintTable();
-
-            step++;
         }
     }
 
-    static int FindPivotColumn(bool phase1)
-    {
-        int lastRow = m;
-        int lastCol = table.GetLength(1) - 1;
-
-        int index = -1;
-        double min = 0;
-
-        for (int j = 0; j < lastCol; j++)
-        {
-            if (!phase1 && artificial[j]) continue;
-
-            if (table[lastRow, j] < min)
-            {
-                min = table[lastRow, j];
-                index = j;
-            }
-        }
-
-        return index;
-    }
-
-    static int FindPivotRow(int pivotCol)
-    {
-        int lastCol = table.GetLength(1) - 1;
-        int index = -1;
-        double minRatio = double.MaxValue;
-
-        Console.WriteLine("\nВідношення b / a:");
-
-        for (int i = 0; i < m; i++)
-        {
-            if (table[i, pivotCol] > EPS)
-            {
-                double ratio = table[i, lastCol] / table[i, pivotCol];
-                Console.WriteLine($"y{i + 1}: {table[i, lastCol]:F4} / {table[i, pivotCol]:F4} = {ratio:F4}");
-
-                if (ratio < minRatio)
-                {
-                    minRatio = ratio;
-                    index = i;
-                }
-            }
-            else
-            {
-                Console.WriteLine($"y{i + 1}: не розглядається");
-            }
-        }
-
-        return index;
-    }
 
     static void ModifiedJordanStep(int pivotRow, int pivotCol)
     {
         int rows = table.GetLength(0);
         int cols = table.GetLength(1);
-        double pivot = table[pivotRow, pivotCol];
 
-        for (int j = 0; j < cols; j++)
-            table[pivotRow, j] /= pivot;
+        double[,] old = CopyMatrix(table);
+        double pivot = old[pivotRow, pivotCol];
 
         for (int i = 0; i < rows; i++)
         {
-            if (i == pivotRow) continue;
-
-            double factor = table[i, pivotCol];
-
             for (int j = 0; j < cols; j++)
-                table[i, j] -= factor * table[pivotRow, j];
+            {
+                if (i == pivotRow && j == pivotCol)
+                {
+                    table[i, j] = 1.0 / pivot;
+                }
+                else if (i == pivotRow)
+                {
+                    table[i, j] = old[i, j] / pivot;
+                }
+                else if (j == pivotCol)
+                {
+                    table[i, j] = -old[i, j] / pivot;
+                }
+                else
+                {
+                    table[i, j] =
+                        (old[i, j] * pivot - old[i, pivotCol] * old[pivotRow, j]) / pivot;
+                }
+            }
         }
+
+        string temp = rowLabels[pivotRow];
+
+        if (colLabels[pivotCol].StartsWith("-x"))
+            rowLabels[pivotRow] = colLabels[pivotCol].Substring(1);
+        else
+            rowLabels[pivotRow] = colLabels[pivotCol].Substring(1);
+
+        colLabels[pivotCol] = "-" + temp;
     }
 
-    static void RecalculateZRow()
+
+    static int FindNegativeFreeTermRow()
     {
-        int lastRow = m;
         int lastCol = table.GetLength(1) - 1;
 
-        for (int j = 0; j <= lastCol; j++)
-            table[lastRow, j] = 0;
+        for (int i = 0; i < constraintsCount; i++)
+        {
+            if (table[i, lastCol] < -EPS)
+                return i;
+        }
+
+        return -1;
+    }
+
+    static int FindNegativeElementInRow(int row)
+    {
+        int lastCol = table.GetLength(1) - 1;
 
         for (int j = 0; j < lastCol; j++)
         {
-            double zj = 0;
-
-            for (int i = 0; i < m; i++)
-                zj += currentC[basis[i]] * table[i, j];
-
-            table[lastRow, j] = zj - currentC[j];
+            if (table[row, j] < -EPS)
+                return j;
         }
 
-        double z = 0;
+        return -1;
+    }
 
-        for (int i = 0; i < m; i++)
-            z += currentC[basis[i]] * table[i, lastCol];
+    static int FindNegativeElementInZRow()
+    {
+        int lastRow = table.GetLength(0) - 1;
+        int lastCol = table.GetLength(1) - 1;
 
-        table[lastRow, lastCol] = z;
+        for (int j = 0; j < lastCol; j++)
+        {
+            if (table[lastRow, j] < -EPS)
+                return j;
+        }
+
+        return -1;
+    }
+
+    static int FindResolvingRowForOptimal(int pivotCol)
+    {
+        int lastCol = table.GetLength(1) - 1;
+
+        int bestRow = -1;
+        double bestRatio = double.MaxValue;
+
+        for (int i = 0; i < constraintsCount; i++)
+        {
+            if (table[i, pivotCol] > EPS)
+            {
+                double ratio = table[i, lastCol] / table[i, pivotCol];
+
+                if (ratio < bestRatio)
+                {
+                    bestRatio = ratio;
+                    bestRow = i;
+                }
+            }
+        }
+
+        return bestRow;
+    }
+
+
+    static void PrintProblem()
+    {
+        Console.WriteLine("Постановка задачі:\n");
+
+        Console.Write("Z = ");
+
+        for (int j = 0; j < variablesCount; j++)
+            PrintTerm(objective[j], $"x{j + 1}", j == 0);
+
+        Console.WriteLine(isMax ? " -> max" : " -> min");
+
+        Console.WriteLine("\nпри обмеженнях:\n");
+
+        for (int i = 0; i < constraintsCount; i++)
+        {
+            for (int j = 0; j < variablesCount; j++)
+                PrintTerm(constraints[i, j], $"x{j + 1}", j == 0);
+
+            Console.WriteLine($" {signs[i]} {rightSide[i]}");
+        }
+
+        Console.WriteLine("\nx[j]>=0, j=1,4");
+    }
+
+    static void PrintRewrittenSystem()
+    {
+        int lastCol = table.GetLength(1) - 1;
+
+        for (int i = 0; i < constraintsCount; i++)
+        {
+            for (int j = 0; j < variablesCount; j++)
+            {
+                Console.Write($"{table[i, j]:F2} * X[{j + 1}]");
+
+                if (j < variablesCount - 1)
+                    Console.Write(" + ");
+            }
+
+            Console.WriteLine($" + {table[i, lastCol]:F2} >= 0");
+        }
     }
 
     static void PrintTable()
     {
+        int rows = table.GetLength(0);
         int cols = table.GetLength(1);
 
-        Console.Write("\nБазис\t");
-        for (int j = 0; j < cols - 1; j++)
-            Console.Write($"{VarName(j)}\t");
-        Console.WriteLine("b");
+        Console.WriteLine();
 
-        for (int i = 0; i < m; i++)
+        Console.Write("        ");
+
+        for (int j = 0; j < cols; j++)
+            Console.Write($"{colLabels[j],10}");
+
+        Console.WriteLine();
+
+        Console.WriteLine(new string('-', 10 + cols * 10));
+
+        for (int i = 0; i < rows; i++)
         {
-            Console.Write($"{VarName(basis[i])}\t");
+            Console.Write($"{rowLabels[i],6} = ");
 
             for (int j = 0; j < cols; j++)
-                Console.Write($"{table[i, j]:F2}\t");
+                Console.Write($"{table[i, j],10:F2}");
 
             Console.WriteLine();
         }
 
-        Console.Write("Z\t");
-        for (int j = 0; j < cols; j++)
-            Console.Write($"{table[m, j]:F2}\t");
-
-        Console.WriteLine("\n");
+        Console.WriteLine();
     }
 
-    static void PrintAnswer(double[] target)
+    static void PrintCurrentX()
     {
+        double[] x = new double[variablesCount];
         int lastCol = table.GetLength(1) - 1;
-        double[] x = new double[n];
 
-        for (int i = 0; i < m; i++)
+        for (int i = 0; i < constraintsCount; i++)
         {
-            if (basis[i] < n)
-                x[basis[i]] = table[i, lastCol];
+            if (rowLabels[i].StartsWith("x"))
+            {
+                int index = int.Parse(rowLabels[i].Substring(1)) - 1;
+
+                if (index >= 0 && index < variablesCount)
+                    x[index] = table[i, lastCol];
+            }
         }
 
-        double z = 0;
-        for (int j = 0; j < n; j++)
-            z += c[j] * x[j];
-
-        Console.WriteLine("\nОптимальний розв'язок:");
         Console.Write("X = (");
 
-        for (int j = 0; j < n; j++)
+        for (int i = 0; i < variablesCount; i++)
         {
-            Console.Write($"{x[j]:F4}");
-            if (j < n - 1) Console.Write("; ");
+            Console.Write($"{x[i]:F2}");
+
+            if (i < variablesCount - 1)
+                Console.Write("; ");
         }
 
         Console.WriteLine(")");
-        Console.WriteLine(isMax ? $"Max(Z) = {z:F4}" : $"Min(Z) = {z:F4}");
     }
 
-    static string VarName(int index)
+    static void PrintTerm(double value, string name, bool first)
     {
-        if (index < n) return $"x{index + 1}";
-        if (artificial != null && artificial[index]) return $"a{index + 1}";
-        return $"s{index - n + 1}";
+        if (Math.Abs(value) < EPS)
+            return;
+
+        if (first)
+        {
+            if (value < 0)
+                Console.Write($"-{Math.Abs(value)}{name}");
+            else
+                Console.Write($"{value}{name}");
+        }
+        else
+        {
+            if (value < 0)
+                Console.Write($" - {Math.Abs(value)}{name}");
+            else
+                Console.Write($" + {value}{name}");
+        }
+    }
+
+
+    static double[,] CopyMatrix(double[,] source)
+    {
+        int rows = source.GetLength(0);
+        int cols = source.GetLength(1);
+
+        double[,] result = new double[rows, cols];
+
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                result[i, j] = source[i, j];
+
+        return result;
     }
 }
